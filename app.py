@@ -9,6 +9,15 @@ from desktop_tools import ClipboardMemory, KeyboardActivity, desktop_path, deskt
 
 ROOT=Path(__file__).resolve().parent
 DATA=Path(os.environ.get('LOCALAPPDATA', str(Path.home()/'.local/share')))/'LR-StudyPet'
+def error_hook(kind,value,tb):
+    import traceback
+    DATA.mkdir(parents=True,exist_ok=True)
+    with (DATA/'startup.log').open('a',encoding='utf-8') as f:traceback.print_exception(kind,value,tb,file=f)
+    if sys.platform=='win32' and '--smoke-test' not in sys.argv:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None,'星梨发生错误。日志：'+str(DATA/'startup.log')+'\n'+str(value),'LR StudyPet',0x10)
+    else:sys.__excepthook__(kind,value,tb)
+sys.excepthook=error_hook
 SUBJECTS=['数学','英语','政治','408','其他']
 STYLE='''
 QWidget {font-family:"Microsoft YaHei", "Noto Sans CJK SC", sans-serif; font-size:14px; color:#304b68;}
@@ -292,7 +301,8 @@ class Main(QMainWindow):
         query.textChanged.connect(update);category.currentTextChanged.connect(update);items.itemSelectionChanged.connect(explain);v.addWidget(button('复制所选命令',copy));update();dialog.show();query.setFocus();self.command_dialog=dialog
     def register_command_hotkey(self):
         try:
-            import ctypes
+            import ctypes,ctypes.wintypes
+            ctypes.windll.user32.RegisterHotKey.argtypes=[ctypes.wintypes.HWND,ctypes.c_int,ctypes.wintypes.UINT,ctypes.wintypes.UINT]
             self.hotkey_registered=bool(ctypes.windll.user32.RegisterHotKey(int(self.winId()),707,0x4000|0x0002|0x0001,0x20))
         except Exception:self.hotkey_registered=False
     def nativeEvent(self,event_type,message):
@@ -391,7 +401,8 @@ class Main(QMainWindow):
         if self.worker and self.worker.isRunning():QMessageBox.information(self,'正在连接','AI 请求仍在进行，结束后再退出，最长等待约 45 秒。');return
         self.end_focus();self.clip_memory.clear();self.keyboard.clear()
         if self.hotkey_registered:
-            import ctypes
+            import ctypes,ctypes.wintypes
+            ctypes.windll.user32.UnregisterHotKey.argtypes=[ctypes.wintypes.HWND,ctypes.c_int]
             ctypes.windll.user32.UnregisterHotKey(int(self.winId()),707)
         self.tray.hide();QApplication.quit()
 
