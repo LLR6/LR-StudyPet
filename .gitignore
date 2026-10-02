@@ -1,0 +1,11 @@
+__pycache__/
+.venv/
+runtime/
+build/
+dist/
+package/
+*.spec
+*.zip
+startup.log
+smoke-result.json
+windows-preview.png
