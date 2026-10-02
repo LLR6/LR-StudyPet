@@ -14,4 +14,5 @@ def run(main,app,output):
  main.tabs.setCurrentIndex(0);app.processEvents();main.grab().save(str(Path(output)/'windows-preview.png'))
  result={'status':'passed','platform':sys.platform,'pages':pages,'key_activity_test':'simulated','clipboard':'real Qt clipboard roundtrip','startup':'covered separately by filesystem unit test','global_hotkey_registered':main.hotkey_registered}
  Path(output,'smoke-result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
- print(json.dumps(result,ensure_ascii=False));return result
+ if sys.stdout is not None:print(json.dumps(result,ensure_ascii=True))
+ return result
