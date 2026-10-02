@@ -1,6 +1,6 @@
 # Third-party components
 
-Python 3.12.10: PSF license, preserved in runtime/LICENSE.txt.
+Python 3.12 runtime: PSF license, preserved in third-party-licenses/PYTHON-LICENSE.txt for native releases (runtime/LICENSE.txt in older embedded packages).
 Source: https://www.python.org/downloads/release/python-31210/
 
 PySide6 Essentials 6.8.3 and Shiboken6 6.8.3: Qt for Python open source licensing applies. Used dynamically and unmodified; modules may be replaced by compatible versions.

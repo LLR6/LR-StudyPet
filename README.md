@@ -27,7 +27,7 @@
 
 ## 快速启动
 
-下载 Windows 便携包，**完整解压**，双击 `Start.cmd`（兼容入口 `启动星梨.bat`）。
+下载 Windows 便携包，**完整解压**，双击 `Start.cmd`。
 已包含 Python 与 Qt 运行时，不需要另装 Python，也不用执行 pip。
 请不要在压缩包里直接双击程序；不要单独移走 bin 或 runtime 文件夹。
 关闭学习窗口只收起面板；右键桌宠或托盘，选择「退出」。
@@ -89,7 +89,7 @@ Windows 数据：`%LOCALAPPDATA%\LR-StudyPet\study.sqlite3`。
 通过 15 项核心与桌面工具测试：暂停不累计、时间归零、复习重排、任务撤销经验、备份往返、坏备份不破坏现有数据、低精力选短任务。
 通过 Linux Qt 离屏界面测试：任务→专注→暂停→继续→保存、复习、救援、离线聊天、全部 10 个页签渲染。
 发布前使用 GitHub Actions 的 Windows runner 执行单元测试、源码界面测试和打包后启动检查；具体运行结果以 Actions 为准。自动测试仍不等于所有个人电脑都实测过；真实键盘、通知、声音与在线 AI 仍需设备验证。
-若启动失败，运行 `启动星梨.bat` 保留错误窗口反馈；程序错误会写入 `%LOCALAPPDATA%\LR-StudyPet\startup.log`（原生版也会显示错误弹窗）。
+若启动失败，运行 `Start.cmd` 保留错误窗口反馈；程序错误会写入 `%LOCALAPPDATA%\LR-StudyPet\startup.log`（原生版也会显示错误弹窗）。
 某些系统需要 Microsoft Visual C++ 2015–2022 x64 运行库：https://aka.ms/vs/17/release/vc_redist.x64.exe 。
 
 当前无 Live2D、语音、截图识题、摄像头监督、窗口监控或云同步。
@@ -102,4 +102,4 @@ Windows 数据：`%LOCALAPPDATA%\LR-StudyPet\study.sqlite3`。
 Windows 可运行 `Build-EXE.bat`，本机使用 PyInstaller 生成可执行分发目录。
 原始角色素材由图片生成制作，包含四种姿态；完整最终配色要求见 `assets/prompt.txt`。
 自有程序源码采用 MIT，角色素材可随本项目使用；第三方依赖遵守各自许可。
-便携包含 Python 3.12.10、PySide6 Essentials 6.8.3、Shiboken6 6.8.3；许可说明见 `THIRD_PARTY.md`。
+便携包含 Python 3.12 系列运行时、PySide6 Essentials 6.8.3、Shiboken6 6.8.3；许可说明见 `THIRD_PARTY.md`。

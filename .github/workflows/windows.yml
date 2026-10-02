@@ -39,6 +39,17 @@ jobs:
           Copy-Item Start.cmd,README.md,README.en.md,LICENSE,THIRD_PARTY.md package\LR-StudyPet
           Copy-Item smoke-result.json,windows-preview.png package\LR-StudyPet
           Copy-Item third-party-licenses package\LR-StudyPet -Recurse
+          $pythonLicense = python -c "import sys; print(sys.base_prefix + '/LICENSE.txt')"
+          Copy-Item $pythonLicense package\LR-StudyPet\third-party-licenses\PYTHON-LICENSE.txt
+          Remove-Item package\LR-StudyPet\smoke-result.json
+          Push-Location package\LR-StudyPet
+          try {
+            $process = Start-Process -FilePath cmd.exe -ArgumentList '/c Start.cmd --smoke-test' -PassThru
+            if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Packaged launcher timed out' }
+            if ($process.ExitCode -ne 0) { throw 'Packaged launcher failed' }
+            $result = Get-Content smoke-result.json -Raw | ConvertFrom-Json
+            if ($result.status -ne 'passed') { throw 'Packaged launcher smoke test failed' }
+          } finally { Pop-Location }
           Compress-Archive -Path package\LR-StudyPet -DestinationPath LR-StudyPet-Blue-v0.2.0-Windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
