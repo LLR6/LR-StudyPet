@@ -5,6 +5,7 @@ from PySide6.QtGui import QPainter, QColor, QPixmap, QIcon, QAction, QFont, QDes
 from PySide6.QtWidgets import *
 
 from core import Store, FocusClock, day
+from study_io import read_cards, import_cards, export_cards, activity_days, weekly_report
 from desktop_tools import ClipboardMemory, KeyboardActivity, desktop_path, desktop_advice, suggest_commands, configure_startup, startup_file
 
 ROOT=Path(__file__).resolve().parent
@@ -68,7 +69,12 @@ class Pet(QWidget):
         self.move(QPoint(*pos) if pos else QPoint(g.right()-250,g.bottom()-330));self.clamp()
         self.message='我是星梨，今天一起学一点吧。';self.message_until=0
     def clamp(self):
-        g=QApplication.primaryScreen().availableGeometry();self.move(max(g.left(),min(self.x(),g.right()-self.width())),max(g.top(),min(self.y(),g.bottom()-self.height())))
+        screens=QApplication.screens()
+        center=self.frameGeometry().center()
+        screen=QApplication.screenAt(center)
+        if screen is None:
+            screen=min(screens,key=lambda s:(s.availableGeometry().center()-center).manhattanLength())
+        g=screen.availableGeometry();self.move(max(g.left(),min(self.x(),g.right()-self.width()+1)),max(g.top(),min(self.y(),g.bottom()-self.height()+1)))
     def say(self,text):self.message=text;self.message_until=self.control.ticks+15;self.update()
     def animate(self):
         self.phase+=.09
@@ -116,12 +122,14 @@ class Pet(QWidget):
 class Main(QMainWindow):
     def __init__(self):
         super().__init__();DATA.mkdir(parents=True,exist_ok=True);self.store=Store(DATA/'study.sqlite3');self.clock=FocusClock();self.ticks=0;self.worker=None;self.clip_memory=ClipboardMemory();self.keyboard=KeyboardActivity();self.key_count=0;self.hotkey_registered=False;self.quiet=self.store.get('quiet',False);self.sound=None
-        self.setWindowTitle('LR StudyPet · 星梨学习空间');self.resize(980,720);self.setMinimumSize(800,620);self.setWindowTitle("LR StudyPet · 星梨 v0.2.0")
+        self.setWindowTitle('LR StudyPet · 星梨学习空间');self.resize(980,720);self.setMinimumSize(800,620);self.setWindowTitle("LR StudyPet · 星梨 v0.3.0")
         root=QWidget();self.setCentralWidget(root);layout=QVBoxLayout(root);layout.setContentsMargins(24,18,24,18)
         head=QHBoxLayout();head.addWidget(label('星梨的学习空间',True));head.addStretch();head.addWidget(button('桌宠',lambda:self.pet.show()));layout.addLayout(head)
         self.status=label('');layout.addWidget(self.status);self.tabs=QTabWidget();layout.addWidget(self.tabs)
         self.focus_ui();self.task_ui();self.review_ui();self.rescue_ui();self.journal_ui();self.stats_ui();self.chat_ui();self.plan_ui();self.toolbox_ui();self.settings_ui()
         self.pet=Pet(self);self.apply_pet_size(self.pet_scale.value());self.pet.show();self.tray=QSystemTrayIcon(self)
+        self.update_subjects()
+        QApplication.instance().screenRemoved.connect(lambda screen:QTimer.singleShot(0,self.pet.clamp))
         icon=QPixmap(64,64);icon.fill(QColor('#85bce6'));self.tray.setIcon(QIcon(icon));self.setWindowIcon(QIcon(icon))
         menu=QMenu();menu.addAction('学习空间',self.reveal);menu.addAction('显示桌宠',self.pet.show);menu.addAction('安静 / 恢复提醒',self.quiet_toggle);menu.addAction('退出',self.quit_app);self.tray.setContextMenu(menu);self.tray.activated.connect(lambda reason:self.reveal() if reason==QSystemTrayIcon.DoubleClick else None);self.tray.show()
         self.timer=QTimer(self);self.timer.timeout.connect(self.tick);self.timer.start(1000);self.refresh()
@@ -151,10 +159,14 @@ class Main(QMainWindow):
         for b in (self.start_btn,self.pause_btn,self.end_btn):row.addWidget(b)
         v.addLayout(row)
         self.resume_note=QLineEdit();self.resume_note.setPlaceholderText('中断书签：做到哪了？下次第一步做什么？');self.resume_note.setText(self.store.get('bookmark',''));self.resume_note.textChanged.connect(lambda text:self.store.set('bookmark',text));v.addWidget(self.resume_note)
+        v.addWidget(button('回来先做 5 分钟',self.restart_small))
         row=QHBoxLayout();self.energy=QComboBox();self.energy.addItems(['中','低','高']);row.addWidget(label('当前精力'));row.addWidget(self.energy);row.addWidget(button('帮我选下一步',lambda:self.next_text.setText(self.store.recommend(self.energy.currentText()))));v.addLayout(row);self.next_text=label('低精力选小任务；正常时优先今天投入较少的科目。');v.addWidget(self.next_text);v.addStretch();self.add_tab(w,'专注')
     def start_focus(self):
         if self.clock.mode!='idle':return
         self.session_subject=self.subject.currentText();self.clock.start(self.minutes.value());self.subject.setEnabled(False);self.minutes.setEnabled(False);self.pet.frame=1;self.notify('我也开始读书啦。这段时间，只做眼前这一件事。');self.refresh()
+    def restart_small(self):
+        if self.clock.mode!='idle':return
+        self.minutes.setValue(5);self.start_focus()
     def pause_focus(self):
         if self.clock.mode=='paused':self.clock.resume();self.pet.restore_frame()
         elif self.clock.mode in ('focus','break'):self.clock.pause();self.pet.frame=0;self.notify('给下一步留一句书签，回来就不用重新找思路。')
@@ -184,6 +196,20 @@ class Main(QMainWindow):
         row=QHBoxLayout();row.addWidget(button('显示答案',self.show_answer))
         for text,grade in [('没记住 · 明天再练',0),('费力想起',1),('轻松掌握',2)]:row.addWidget(button(text,lambda checked=False,g=grade:self.grade(g)))
         v.addLayout(row);self.add_tab(w,'复习')
+        row=QHBoxLayout();row.addWidget(button('导入 CSV 卡片',self.import_review_csv));row.addWidget(button('导出 CSV 卡片',self.export_review_csv));v.addLayout(row)
+    def import_review_csv(self):
+        path,_=QFileDialog.getOpenFileName(self,'导入复习卡','','CSV (*.csv)')
+        if not path:return
+        try:
+            cards=read_cards(path,self.review_subject.currentText())
+            if QMessageBox.question(self,'导入预览',f'已检查 {len(cards)} 张卡片。导入后保留原有进度，完全相同的卡片跳过。继续？')!=QMessageBox.Yes:return
+            count=import_cards(self.store,cards);self.update_subjects();self.refresh();QMessageBox.information(self,'导入完成',f'新增 {count} 张卡片。')
+        except Exception as e:QMessageBox.warning(self,'导入失败',str(e))
+    def export_review_csv(self):
+        path,_=QFileDialog.getSaveFileName(self,'导出复习卡','StudyPet-cards.csv','CSV (*.csv)')
+        if path:
+            try:export_cards(self.store,path);QMessageBox.information(self,'导出完成','CSV 包含问题、答案和科目；复习进度请用 JSON 备份。')
+            except Exception as e:QMessageBox.warning(self,'导出失败',str(e))
     def add_review(self):
         try:self.store.review(self.question.text(),self.answer.toPlainText(),self.review_subject.currentText());self.question.clear();self.answer.clear();self.refresh()
         except ValueError as e:QMessageBox.warning(self,'复习卡',str(e))
@@ -207,7 +233,19 @@ class Main(QMainWindow):
         if not t.strip():return
         self.store.journal(k,t);self.journal_text.clear();self.refresh();self.notify('记下了。未来的你会感谢这句提示。')
     def stats_ui(self):
-        w,v=page();v.addWidget(label('成长来自你真正完成的学习',True));self.stats_text=label('');v.addWidget(self.stats_text);self.week_list=QListWidget();v.addWidget(self.week_list);v.addWidget(button('刷新统计',self.refresh));v.addWidget(label('时长只统计主动开始的专注；不监控窗口、屏幕或键盘。完成任务可撤销，经验也会随之调整。'));self.add_tab(w,'成长')
+        w,v=page();v.addWidget(label('成长来自你真正完成的学习',True));self.stats_text=label('');v.addWidget(self.stats_text)
+        v.addWidget(label('最近 28 天 · 颜色按每天计时分钟加深（悬停查看）'))
+        grid=QGridLayout();self.activity_cells=[]
+        for i in range(28):
+            cell=QLabel('');cell.setAlignment(Qt.AlignCenter);cell.setMinimumHeight(28);grid.addWidget(cell,i//7,i%7);self.activity_cells.append(cell)
+        v.addLayout(grid);self.week_list=QListWidget();v.addWidget(self.week_list)
+        row=QHBoxLayout();row.addWidget(button('刷新统计',self.refresh));row.addWidget(button('导出本周 Markdown 周报',self.export_week));v.addLayout(row)
+        v.addWidget(label('时长只统计主动开始的专注；不监控窗口、屏幕或键盘。完成任务可撤销，经验也会随之调整。'));self.add_tab(w,'成长')
+    def export_week(self):
+        path,_=QFileDialog.getSaveFileName(self,'导出学习周报','StudyPet-week-'+day()+'.md','Markdown (*.md)')
+        if path:
+            try:Path(path).write_text(weekly_report(self.store),encoding='utf-8');QMessageBox.information(self,'周报','已导出。周报包含手记，分享前检查个人内容。')
+            except Exception as e:QMessageBox.warning(self,'导出失败',str(e))
     def chat_ui(self):
         w,v=page();v.addWidget(label('问星梨 · 可选 AI',True));self.chat_log=QTextEdit();self.chat_log.setReadOnly(True);v.addWidget(self.chat_log);self.chat_input=QLineEdit();self.chat_input.setPlaceholderText('未连接 AI 时，支持：下一步 / 休息 / 鼓励 / 复习');self.chat_input.returnPressed.connect(self.chat);v.addWidget(self.chat_input);self.send_btn=button('发送',self.chat);v.addWidget(self.send_btn);v.addWidget(label('联网 AI 只收到你在此输入的消息。任务、手记和屏幕不会自动发送。对话仅在本次打开期间显示。'));self.add_tab(w,'聊天')
     def chat(self):
@@ -318,9 +356,22 @@ class Main(QMainWindow):
     def settings_ui(self):
         w,v=page();v.addWidget(label('按你的节奏来',True));self.autostart=QCheckBox('登录 Windows 后自动启动星梨');self.autostart.setChecked(startup_file().exists() if sys.platform=='win32' else False);self.autostart.setEnabled(sys.platform=='win32');self.autostart.toggled.connect(self.startup_toggle);v.addWidget(self.autostart);row=QHBoxLayout();row.addWidget(label('桌宠大小 / %'));self.pet_scale=QSpinBox();self.pet_scale.setRange(70,180);self.pet_scale.setValue(self.store.get('pet_scale',100));self.pet_scale.valueChanged.connect(self.apply_pet_size);row.addWidget(self.pet_scale);v.addLayout(row);self.ai_enabled=QCheckBox('启用联网 AI 聊天');cfg=self.store.get('ai',{});self.ai_enabled.setChecked(cfg.get('enabled',False));v.addWidget(self.ai_enabled);self.ai_base=QLineEdit(cfg.get('base','https://api.openai.com/v1'));self.ai_model=QLineEdit(cfg.get('model',''));self.ai_model.setPlaceholderText('填写服务商提供的模型名称');v.addWidget(label('兼容接口地址（以 /v1 结尾）'));v.addWidget(self.ai_base);v.addWidget(label('模型名称'));v.addWidget(self.ai_model);v.addWidget(button('保存 AI 配置',self.save_ai));v.addWidget(label('密钥从电脑环境变量 LR_PET_API_KEY 读取，不存入备份。启用在线服务可能产生服务商费用。'))
         row=QHBoxLayout();row.addWidget(button('导出学习备份',self.export));row.addWidget(button('恢复学习备份',self.restore));row.addWidget(button('安静 / 恢复提醒',self.quiet_toggle));v.addLayout(row)
+        row=QHBoxLayout();self.subject_names=QLineEdit('，'.join(self.store.get('custom_subjects',SUBJECTS)));row.addWidget(self.subject_names);row.addWidget(button('保存科目',self.save_subjects));v.addLayout(row)
+        v.addWidget(label('用中文或英文逗号分隔科目；最多 20 个。已有记录的科目继续保留。'))
         self.health=QCheckBox('每 50 分钟轻声提醒活动和喝水');self.health.setChecked(self.store.get('health',True));self.health.toggled.connect(lambda x:self.store.set('health',x));v.addWidget(self.health)
         row=QHBoxLayout();row.addWidget(button('雨声开 / 关',self.noise));row.addWidget(button('两分钟离屏休息',self.short_break));v.addLayout(row)
-        v.addWidget(label('数据保存在本机用户目录。关闭学习窗口后桌宠继续运行；从桌宠右键或托盘菜单退出。右键桌宠可以摸头、切换安静模式和退出。'));v.addStretch();self.add_tab(w,'设置')
+        v.addWidget(label('数据保存在本机用户目录。关闭学习窗口后桌宠继续运行；从桌宠右键或托盘菜单退出。右键桌宠可以摸头、切换安静模式和退出。'));v.addStretch();scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setFrameShape(QFrame.NoFrame);scroll.setWidget(w);self.add_tab(scroll,'设置')
+    def update_subjects(self):
+        names=list(dict.fromkeys(self.store.get('custom_subjects',SUBJECTS)+[r['subject'] for t in ('tasks','reviews','sessions') for r in self.store.rows(t) if r['subject']]))
+        self.subjects=names
+        for combo in (self.subject,self.task_subject,self.review_subject):
+            current=combo.currentText();combo.clear();combo.addItems(names)
+            if current in names:combo.setCurrentText(current)
+    def save_subjects(self):
+        names=list(dict.fromkeys(n.strip() for n in self.subject_names.text().replace('，',',').split(',') if n.strip()))
+        if not names or len(names)>20 or any(len(n)>80 for n in names):QMessageBox.warning(self,'科目','请填写 1～20 个科目，每个最多 80 字。');return
+        if self.clock.mode!='idle':QMessageBox.information(self,'科目','请先结束当前计时再修改科目。');return
+        self.store.set('custom_subjects',names);self.update_subjects();self.refresh()
     def save_ai(self):
         base=self.ai_base.text().strip();model=self.ai_model.text().strip()
         if self.ai_enabled.isChecked() and (not base.startswith('https://') or not model):QMessageBox.warning(self,'AI 配置','请填写 HTTPS 接口地址和模型名称。');return
@@ -334,7 +385,7 @@ class Main(QMainWindow):
         if self.clock.mode!='idle':QMessageBox.warning(self,'恢复','请先结束专注。');return
         if QMessageBox.question(self,'恢复备份','将替换当前学习记录。恢复前会自动备份现有数据。继续？')!=QMessageBox.Yes:return
         try:
-            self.store.export(DATA/('before-restore-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S')+'.json'));self.store.restore(path);self.refresh()
+            self.store.export(DATA/('before-restore-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S')+'.json'));self.store.restore(path);self.update_subjects();self.refresh()
         except Exception as e:QMessageBox.warning(self,'恢复失败',str(e))
     def noise(self):
         if sys.platform!='win32':
@@ -367,6 +418,9 @@ class Main(QMainWindow):
         self.journal_list.clear()
         for r in self.store.rows('journal')[:100]:self.journal_list.addItem(r['date']+' / '+r['kind']+'\n'+r['text'])
         self.stats_text.setText(f"等级 {1+xp//120} · 共专注 {sum(s['seconds'] for s in self.store.rows('sessions'))//60} 分钟\n完成任务 {sum(t['done'] for t in self.store.rows('tasks'))} 项 · 待复习 {self.review_list.count()} 张")
+        for cell,(date,seconds) in zip(self.activity_cells,activity_days(self.store)):
+            color='#edf4fa' if seconds==0 else '#cee6fa' if seconds<1800 else '#93c6ee' if seconds<5400 else '#4d96cc'
+            cell.setText(date[5:]);cell.setToolTip(f'{date}: {seconds//60} 分钟');cell.setStyleSheet(f'background:{color};border-radius:5px;color:#173c5d;padding:2px')
         self.goal_progress.setRange(0,self.goal.value());self.goal_progress.setValue(self.store.today_seconds()//60);self.goal_progress.setFormat('%v / %m 分钟')
         target=datetime.date.fromisoformat(self.store.get('target_date',day()));delta=(target-datetime.date.today()).days;self.countdown.setText(self.store.get('target_name','我的目标')+f' · 距离目标日期 {delta} 天')
         self.alarm_list.clear()
@@ -374,7 +428,7 @@ class Main(QMainWindow):
             item=QListWidgetItem(('✓ 已提醒' if a['done'] else '○ 待提醒')+' · '+datetime.datetime.fromtimestamp(a['at']).strftime('%m-%d %H:%M')+' · '+a['text']);item.setData(Qt.UserRole,index);self.alarm_list.addItem(item)
         self.week_list.clear()
         for d in [datetime.date.today()-datetime.timedelta(days=i) for i in range(7)]:
-            parts=[f"{s} {sum(r['seconds'] for r in self.store.rows('sessions') if r['date']==d.isoformat() and r['subject']==s)//60} 分" for s in SUBJECTS];self.week_list.addItem(d.isoformat()+'  '+ ' · '.join(parts))
+            parts=[f"{s} {sum(r['seconds'] for r in self.store.rows('sessions') if r['date']==d.isoformat() and r['subject']==s)//60} 分" for s in getattr(self,'subjects',SUBJECTS)];self.week_list.addItem(d.isoformat()+'  '+ ' · '.join(parts))
     def tick(self):
         self.ticks+=1
         alarms=self.store.get('alarms',[]);changed=False

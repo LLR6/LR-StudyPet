@@ -1,10 +1,11 @@
-星梨 v0.2.0 / Xingli interactive study companion beta
+星梨 v0.3.0 · 把学习接起来
 
-新增键盘联动、剪贴板上一条的 60 秒内存记忆、桌面整理建议、命令助手、可选开机自启动和桌宠大小调节。
-保留专注、任务、复习卡、中断书签、学习手记、分科统计与可选 AI 聊天。
+- 新增 28 天学习热力图与本周 Markdown 周报。
+- CSV 复习卡导入、导出，导入前校验，重复卡片保留已有进度。
+- 自定义科目，旧记录继续可见。
+- “回来先做 5 分钟”，直接接上中断书签。
+- 修复多屏拖拽，拔掉显示器后重新定位。
+- companions 内提供 ResumeDock 和 DeskTidy 独立工具源码。
 
-下载 ZIP 后完整解压，双击 Start.cmd。运行环境已打包。
-键盘联动和剪贴板记忆需手动开启；桌面整理只给建议；命令助手只复制、不执行。
-此为测试版。Windows 构建工作流检查源码界面和打包后的程序能否启动及基本功能，无法覆盖所有个人电脑。
-
-New: keyboard reactions, ephemeral previous-clipboard memory, read-only desktop advice, command palette and optional startup. Extract the full ZIP and launch Start.cmd.
+Windows ZIP 完整解压后双击 Start.cmd。旧版学习数据库自动沿用。
+本版为测试版；键盘、全局快捷键、真实多屏切换和在线 AI 仍需用户设备验证。

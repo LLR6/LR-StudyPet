@@ -1,14 +1,38 @@
-# LR StudyPet · 星梨 v0.2.0
+# LR StudyPet · 星梨 v0.3.0
 
 **你敲键盘，她也陪着敲；你学到一半离开，她帮你留住下一步。**
 
 [English](README.en.md) · [Windows 下载](https://github.com/LLR6/LR-StudyPet/releases) · [反馈问题](https://github.com/LLR6/LR-StudyPet/issues)
 
-![星梨学习空间](preview.png)
+![星梨键盘联动 · 程序渲染演示](docs/pet-demo.gif)
+
+![星梨学习空间 · 演示数据](docs/demo.gif)
 
 原创浅蓝色二次元学习桌宠，把桌面互动和真正的复习流程接起来。
 
-## v0.2 的桌面互动
+## v0.3：离开后也能接着学
+
+- **回来先做 5 分钟**：保留中断书签，用一个小动作重新开始。
+- **28 天热力图 + 周报**：看最近的节奏，导出 Markdown 分科周报和手记。
+- **CSV 复习卡**：导入前完整校验，重复卡片保留原有复习进度；支持多行答案。
+- **自定义科目**：考研、科研、写作都能用，已有科目不会从记录中消失。
+- **多屏定位修复**：支持拖到副屏，拔掉屏幕后回到可见位置。
+
+[复习卡 CSV 示例](examples/review-cards.csv) · [真实使用演示](docs/DEMO.md) · [项目分析与后续计划](docs/GROWTH.md)
+
+![学习节奏](docs/growth-preview.png)
+
+## 同系列实用工具
+
+| 工具 | 解决什么问题 | 入口 |
+|---|---|---|
+| **LR-ResumeDock** | 离开后忘了做到哪：下一步书签、资料入口、5 分钟续接浮窗 | [独立源码与用法](companions/LR-ResumeDock) |
+| **LR-DeskTidy** | 桌面文件太乱：先预览、选择性分类移动、撤销；内容重复只提示 | [独立源码与用法](companions/LR-DeskTidy) |
+
+两个工具可独立运行，不依赖 StudyPet；当前源码放在 companions，独立仓库尚未创建。
+Windows 构建产物见 [Actions](https://github.com/LLR6/LR-StudyPet/actions) 中各自的 artifact。
+
+## 桌面互动
 
 | 功能 | 实际行为 |
 |---|---|
@@ -28,7 +52,7 @@
 ## 快速启动
 
 下载 Windows 便携包，**完整解压**，双击 `Start.cmd`。
-已包含 Python 与 Qt 运行时，不需要另装 Python，也不用执行 pip。
+已包含程序与 Qt 运行环境，不需要另装 Python，也不用执行 pip。
 请不要在压缩包里直接双击程序；不要单独移走 bin 或 runtime 文件夹。
 关闭学习窗口只收起面板；右键桌宠或托盘，选择「退出」。
 
@@ -63,6 +87,8 @@
 
 例如，中断书签可以写：`PV 题已确定 empty=5，回来先检查 P 操作顺序。`
 「帮我选下一步」按公开的简单规则推荐，尚未采用预测模型。
+CSV 表头为 `question,answer,subject`，UTF-8 编码；导入会跳过问题、答案和科目都相同的卡片。CSV 只迁移内容，完整复习进度仍用 JSON 备份。
+
 复习间隔：没记住 1 天，费力想起至少 2 天后，轻松掌握至少 4 天后；以后随间隔扩大。
 
 ## 可选 AI
@@ -86,7 +112,7 @@ Windows 数据：`%LOCALAPPDATA%\LR-StudyPet\study.sqlite3`。
 
 ## 验证与当前边界
 
-通过 15 项核心与桌面工具测试：暂停不累计、时间归零、复习重排、任务撤销经验、备份往返、坏备份不破坏现有数据、低精力选短任务。
+通过 20 项核心、桌面工具和数据交换测试：暂停不累计、时间归零、复习重排、任务撤销经验、备份往返、坏备份不破坏现有数据、低精力选短任务。
 通过 Linux Qt 离屏界面测试：任务→专注→暂停→继续→保存、复习、救援、离线聊天、全部 10 个页签渲染。
 发布前使用 GitHub Actions 的 Windows runner 执行单元测试、源码界面测试和打包后启动检查；具体运行结果以 Actions 为准。自动测试仍不等于所有个人电脑都实测过；真实键盘、通知、声音与在线 AI 仍需设备验证。
 若启动失败，运行 `Start.cmd` 保留错误窗口反馈；程序错误会写入 `%LOCALAPPDATA%\LR-StudyPet\startup.log`（原生版也会显示错误弹窗）。

@@ -50,12 +50,12 @@ jobs:
             $result = Get-Content smoke-result.json -Raw | ConvertFrom-Json
             if ($result.status -ne 'passed') { throw 'Packaged launcher smoke test failed' }
           } finally { Pop-Location }
-          Compress-Archive -Path package\LR-StudyPet -DestinationPath LR-StudyPet-Blue-v0.2.0-Windows-x64.zip
+          Compress-Archive -Path package\LR-StudyPet -DestinationPath LR-StudyPet-Blue-v0.3.0-Windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: LR-StudyPet-Windows
           path: |
-            LR-StudyPet-Blue-v0.2.0-Windows-x64.zip
+            LR-StudyPet-Blue-v0.3.0-Windows-x64.zip
             smoke-result.json
             windows-preview.png
       - name: Publish tested beta release
@@ -64,10 +64,52 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          gh release view v0.2.0 --repo "${{ github.repository }}" 2>$null
+          gh release view v0.3.0 --repo "${{ github.repository }}" 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create v0.2.0 --repo "${{ github.repository }}" --title "星梨 v0.2.0 · 蓝色互动学习桌宠" --notes-file RELEASE.md --prerelease --target "${{ github.sha }}"
+            gh release create v0.3.0 --repo "${{ github.repository }}" --title "星梨 v0.3.0 · 学习周报与复习卡导入" --notes-file RELEASE.md --prerelease --target "${{ github.sha }}"
             if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
           }
-          gh release upload v0.2.0 LR-StudyPet-Blue-v0.2.0-Windows-x64.zip --repo "${{ github.repository }}" --clobber
+          gh release upload v0.3.0 LR-StudyPet-Blue-v0.3.0-Windows-x64.zip --repo "${{ github.repository }}" --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
+  companions:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [LR-ResumeDock, LR-DeskTidy]
+    defaults:
+      run:
+        working-directory: companions/${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+      - name: Unit tests and GUI smoke test
+        run: |
+          python -m unittest -v
+          if ($LASTEXITCODE -ne 0) { throw 'Unit tests failed' }
+          python app.py --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw 'GUI smoke failed' }
+      - name: Build standalone app
+        run: python -m PyInstaller --noconfirm --clean --windowed --name ${{ matrix.project }} app.py
+      - name: Validate and package
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath "dist\${{ matrix.project }}\${{ matrix.project }}.exe" -ArgumentList '--smoke-test' -PassThru
+          if (-not $process.WaitForExit(180000)) { $process.Kill(); throw 'Smoke timed out' }
+          if ($process.ExitCode -ne 0) { throw 'Packaged app failed' }
+          New-Item -ItemType Directory -Path package\${{ matrix.project }}\bin -Force
+          Copy-Item dist\${{ matrix.project }} package\${{ matrix.project }}\bin\${{ matrix.project }} -Recurse
+          Copy-Item Start.cmd,README.md,README.en.md,LICENSE,THIRD_PARTY.md package\${{ matrix.project }}
+          Copy-Item ..\..\third-party-licenses package\${{ matrix.project }} -Recurse
+          $pythonLicense = python -c "import sys; print(sys.base_prefix + '/LICENSE.txt')"
+          Copy-Item $pythonLicense package\${{ matrix.project }}\third-party-licenses\PYTHON-LICENSE.txt
+          Compress-Archive -Path package\${{ matrix.project }} -DestinationPath ${{ matrix.project }}-v0.1.0-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.project }}-Windows
+          path: companions/${{ matrix.project }}/${{ matrix.project }}-v0.1.0-Windows-x64.zip

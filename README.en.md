@@ -1,10 +1,23 @@
-# LR StudyPet — Xingli
+# LR StudyPet · Xingli v0.3.0
+
 
 **A blue anime desktop companion that helps you return to your next small step.**
 
 [简体中文](README.md) · [Download Windows beta](https://github.com/LLR6/LR-StudyPet/releases) · [Report a problem](https://github.com/LLR6/LR-StudyPet/issues)
 
 ![Study space](preview.png)
+
+## New in v0.3
+
+- Five-minute restart using your interruption bookmark.
+- 28-day activity grid and Markdown weekly reports.
+- UTF-8 CSV review-card import/export with validation and duplicate skipping.
+- Custom subjects; historical subjects remain visible.
+- Multi-monitor pet positioning and recovery after screen removal.
+
+CSV headers: `question,answer,subject`. CSV exports card content; JSON backups retain schedules.
+
+Independent companion tools: [ResumeDock](companions/LR-ResumeDock) for interruption bookmarks and a restart dock, and [DeskTidy](companions/LR-DeskTidy) for previewed, selective, undoable file organization. Separate repositories have not been created yet. Windows artifacts are built in Actions.
 
 ## Why another desktop pet?
 

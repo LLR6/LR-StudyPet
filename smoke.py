@@ -8,6 +8,14 @@ def run(main,app,output):
  main.clipboard_enabled.setChecked(True);app.clipboard().setText('first');app.processEvents();app.clipboard().setText('second');app.processEvents();assert main.clip_memory.prior()=='first';main.clip_clear();assert not main.clip_memory.prior()
  main.keyboard_enabled.setChecked(True);main.on_keys(2);assert main.key_count==2
  main.open_commands();assert main.command_dialog.isVisible();main.command_dialog.close()
+ main.store.set('custom_subjects',['科研','写作']);main.update_subjects();assert main.subject.findText('科研')>=0
+ main.minutes.setValue(25);main.restart_small();assert main.clock.duration==300;main.end_focus()
+ from study_io import import_cards,export_cards,read_cards,weekly_report
+ assert import_cards(main.store,[('多行问题','第一行\n第二行','科研')])==1
+ with tempfile.TemporaryDirectory() as folder:
+  csv=Path(folder)/'cards.csv';export_cards(main.store,csv);assert read_cards(csv)[0][1]=='第一行\n第二行'
+ assert '学习周报' in weekly_report(main.store)
+ main.refresh();assert len(main.activity_cells)==28
  pages=[]
  for i in range(main.tabs.count()):
   main.tabs.setCurrentIndex(i);app.processEvents();pages.append(main.tabs.tabText(i))
