@@ -21,7 +21,7 @@
 Windows 源码：安装 Python 3.12/3.13，双击 `Start.cmd`。
 跨平台：`python -m pip install -r requirements.txt`，再 `python app.py`。
 无需 Python 的 Windows 便携构建产物见 StudyPet 的 [Actions](https://github.com/LLR6/LR-StudyPet/actions)，名称 `LR-DeskTidy-Windows`。
-独立仓库尚未创建，当前目录可单独运行和打包。
+Windows 下载也会发布在 [星梨下载页](https://github.com/LLR6/LR-StudyPet/releases)。独立仓库尚未创建，当前目录可单独运行和打包。
 
 ## 使用
 

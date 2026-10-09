@@ -1,4 +1,4 @@
-# LR StudyPet · Xingli v0.3.0
+# LR StudyPet · Xingli v0.4.0
 
 
 **A blue anime desktop companion that helps you return to your next small step.**
@@ -7,7 +7,15 @@
 
 ![Study space](preview.png)
 
-## New in v0.3
+## New in v0.4
+
+Event-driven Windows keyboard reactions, alternating hand taps and highlighted keys, smooth idle/sleep transitions, and continuous state GIFs. A local Workshop imports, previews, creates, switches and exports data-only PNG/GIF/WebP pet packs with seven optional action states.
+
+One idle image is enough for a breathing character with a keyboard overlay. Full pose animation requires separate assets; the app does not generate an animation rig from a photo. No online marketplace or built-in cloud image generation.
+
+[Workshop guide](docs/WORKSHOP.md) · The Chinese display name is 星梨桌宠. GitHub repository slugs cannot contain Chinese characters, so the existing URL is retained.
+
+## Study features
 
 - Five-minute restart using your interruption bookmark.
 - 28-day activity grid and Markdown weekly reports.

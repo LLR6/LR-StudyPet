@@ -40,7 +40,7 @@ def preview(root):
             while destination.exists() or destination.is_symlink() or str(destination).casefold() in reserved:
                 destination=root/category/f'{source.stem} ({index}){source.suffix}';index+=1
             reserved.add(str(destination).casefold())
-            items.append({'source':source.name,'destination':str(destination.relative_to(root)),
+            items.append({'source':source.name,'destination':destination.relative_to(root).as_posix(),
                           'sha256':fingerprint,'size':source.stat().st_size})
             if len(items)>=500:
                 skipped.append('已达 500 文件预览上限；整理后可重新扫描。');break
@@ -147,7 +147,7 @@ def undo(journal):
 
 
 def latest_journal(root):
-    history=Path(root)/'.lr-desktidy'
+    history=Path(root).resolve()/'.lr-desktidy'
     if history.is_symlink():raise ValueError('历史目录不能是链接')
     files=sorted(history.glob('*.json'),key=lambda p:p.stat().st_mtime_ns,reverse=True)
     for file in files:

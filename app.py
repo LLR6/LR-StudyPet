@@ -1,11 +1,15 @@
-import os, sys, math, random, json, datetime, urllib.request, wave, struct
+import os, sys, math, random, json, datetime, urllib.request, wave, struct, time
 from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, QThread, Signal, QPoint, QUrl, QDate, QDateTime, QEvent
-from PySide6.QtGui import QPainter, QColor, QPixmap, QIcon, QAction, QFont, QDesktopServices
+from PySide6.QtGui import QPainter, QColor, QPixmap, QIcon, QAction, QFont, QDesktopServices, QMovie, QImageReader
 from PySide6.QtWidgets import *
 
 from core import Store, FocusClock, day
 from study_io import read_cards, import_cards, export_cards, activity_days, weekly_report
+from keyboard_input import KeyboardListener
+from keyboard_motion import TypingMotion
+from workshop import load_pack, make_pack
+from workshop_ui import Workshop
 from desktop_tools import ClipboardMemory, KeyboardActivity, desktop_path, desktop_advice, suggest_commands, configure_startup, startup_file
 
 ROOT=Path(__file__).resolve().parent
@@ -28,7 +32,7 @@ QTabBar::tab:selected{background:#d4eaff;color:#285d90;}
 QPushButton{background:#e3f1ff;border:0;border-radius:10px;padding:10px 14px;}
 QPushButton:hover{background:#cde7ff;} QPushButton:disabled{color:#aaa;background:#f0f0f0;}
 QLineEdit,QTextEdit,QSpinBox,QComboBox,QListWidget{background:white;border:1px solid #d9e9f5;border-radius:9px;padding:8px;}
-QListWidget::item{padding:9px;border-bottom:1px solid #eff6fc;} QLabel#title{font-size:25px;font-weight:700;}
+QListWidget::item{padding:9px;border-bottom:1px solid #eff6fc;} QListWidget::item:selected{background:#cce6fb;color:#204867;} QLabel#title{font-size:25px;font-weight:700;}
 QLabel#clock{font-size:62px;font-weight:700;color:#478fc9;} QProgressBar{border:0;background:#eaf3fa;border-radius:6px;height:10px;}
 QProgressBar::chunk{background:#7fb8e5;border-radius:6px;}
 '''
@@ -60,14 +64,39 @@ class AIWorker(QThread):
 class Pet(QWidget):
     def __init__(self,control):
         super().__init__();self.control=control;self.frame=0;self.phase=0;self.drag=None;self.typing_until=0;self.sparkles=[];self.hop_until=0
+        self.reaction=TypingMotion();self.demo_until=0;self.pat_until=0;self.skin_data=None;self.skin_folder=None;self.skin_movie=None;self.skin_file=None;self.skin_pixmap=None
         self.setWindowFlags(Qt.FramelessWindowHint|Qt.WindowStaysOnTopHint|Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground);self.setFixedSize(230,310)
         self.sprite=QPixmap(str(ROOT/'assets/pet.png'))
-        self.timer=QTimer(self);self.timer.timeout.connect(self.animate);self.timer.start(33)
+        self.timer=QTimer(self);self.timer.timeout.connect(self.animate);self.timer.start(16)
         pos=control.store.get('pet_position',None)
         g=QApplication.primaryScreen().availableGeometry()
         self.move(QPoint(*pos) if pos else QPoint(g.right()-250,g.bottom()-330));self.clamp()
         self.message='我是星梨，今天一起学一点吧。';self.message_until=0
+        active=control.store.get('active_skin',None)
+        if isinstance(active,str) and len(active)==32 and all(c in '0123456789abcdef' for c in active):
+            try:self.apply_skin(DATA/'pets'/active)
+            except Exception:self.message='自定义角色不可用，已恢复默认星梨。'
+    def apply_skin(self,folder):
+        data=load_pack(folder) if folder else None
+        if self.skin_movie:self.skin_movie.stop();self.skin_movie.deleteLater()
+        self.skin_movie=None;self.skin_file=None;self.skin_pixmap=None;self.skin_folder=Path(folder) if folder else None;self.skin_data=data;self.update()
+    def skin_image(self,state):
+        if not self.skin_data:return None
+        file=self.skin_data['states'].get(state,self.skin_data['states']['idle'])
+        if file!=self.skin_file:
+            if self.skin_movie:self.skin_movie.stop();self.skin_movie.deleteLater();self.skin_movie=None
+            path=self.skin_folder/file;self.skin_file=file;self.skin_pixmap=QPixmap(str(path))
+            if QImageReader(str(path)).supportsAnimation():
+                self.skin_movie=QMovie(str(path),b'',self);self.skin_movie.frameChanged.connect(lambda frame:self.update());self.skin_movie.finished.connect(self.skin_movie.start);self.skin_movie.start()
+        return self.skin_movie.currentPixmap() if self.skin_movie and not self.skin_movie.currentPixmap().isNull() else self.skin_pixmap
+    def export_template(self,path):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            sources={};cw=self.sprite.width()//2;ch=self.sprite.height()//2
+            for state,frame in [('idle',0),('focus',1),('celebrate',2),('rest',3),('sleep',3),('pat',2)]:
+                file=Path(folder)/(state+'.png');self.sprite.copy((frame%2)*cw,(frame//2)*ch,cw,ch).save(str(file));sources[state]=file
+            make_pack(path,'星梨制作模板','LR','可随星梨桌宠项目使用；请保留出处',sources,True)
     def clamp(self):
         screens=QApplication.screens()
         center=self.frameGeometry().center()
@@ -77,43 +106,67 @@ class Pet(QWidget):
         g=screen.availableGeometry();self.move(max(g.left(),min(self.x(),g.right()-self.width()+1)),max(g.top(),min(self.y(),g.bottom()-self.height()+1)))
     def say(self,text):self.message=text;self.message_until=self.control.ticks+15;self.update()
     def animate(self):
-        self.phase+=.09
+        self.phase+=.045
         self.sparkles=[(x,y-.9,life-1) for x,y,life in self.sparkles if life>0]
         if self.control.ticks>self.message_until and self.message_until:
             self.message='我在这里，陪你做下一小步。';self.message_until=0
         self.update()
-    def typing(self):
+    def typing(self,count=1):
+        self.reaction.press(count)
+        self.demo_until=time.monotonic()+0.5
         self.typing_until=self.phase+1.8
         if random.random()<.25:self.sparkles.append((random.randint(85,155),220,22))
     def paintEvent(self,e):
-        p=QPainter(self);p.setRenderHint(QPainter.Antialiasing);p.scale(self.width()/230,self.height()/310)
+        p=QPainter(self);p.setRenderHint(QPainter.Antialiasing);p.setRenderHint(QPainter.SmoothPixmapTransform);p.scale(self.width()/230,self.height()/310)
         p.setPen(Qt.NoPen);p.setBrush(QColor(255,253,255,242));p.drawRoundedRect(8,6,214,68,15,15)
         p.setPen(QColor('#3e6485'));p.setFont(QFont('Microsoft YaHei',10));p.drawText(20,12,190,54,Qt.AlignCenter|Qt.TextWordWrap,self.message)
         y=78+int(math.sin(self.phase)*3)
+        state=self.reaction.state(focused=self.control.clock.mode=='focus',enabled=self.control.keyboard_enabled.isChecked() or time.monotonic()<self.demo_until,sleep_after=self.control.sleep_delay.value())
+        if self.control.clock.mode=='break' and state!='typing':state='rest'
+        if self.frame==2 and state!='typing':state='celebrate'
+        if time.monotonic()<self.pat_until and state!='typing':state='pat'
+        typing=state=='typing'
+        if typing:y+=int(max(self.reaction.pressure(0),self.reaction.pressure(1))*2)
         if self.phase<self.hop_until:y-=int(abs(math.sin(self.phase*4))*12)
-        if not self.sprite.isNull():
-            cw=self.sprite.width()//2;ch=self.sprite.height()//2;cell=self.sprite.copy((self.frame%2)*cw,(self.frame//2)*ch,cw,ch)
+        custom=self.skin_image(state)
+        if custom is not None and not custom.isNull():
+            image=custom.scaled(210,210,Qt.KeepAspectRatio,Qt.SmoothTransformation);p.drawPixmap((230-image.width())//2,y+(210-image.height())//2,image)
+        elif not self.sprite.isNull():
+            frame=0 if typing else 3 if state=='sleep' else self.frame
+            cw=self.sprite.width()//2;ch=self.sprite.height()//2;cell=self.sprite.copy((frame%2)*cw,(frame//2)*ch,cw,ch)
             p.drawPixmap(10,y,210,210,cell)
         else:
             p.setBrush(QColor('#cbbaf0'));p.drawEllipse(65,y+25,100,110);p.setBrush(QColor('#ffeadf'));p.drawEllipse(75,y+45,80,70)
             p.setBrush(QColor('#eee3ff'));p.drawRoundedRect(75,y+112,80,60,20,20);p.setPen(QColor('#7959a9'));p.drawText(98,y+80,'• ᴗ •')
-        if self.phase<self.typing_until:
-            p.setPen(QColor('#8fbedf'));p.setBrush(QColor('#e6f4ff'));p.drawRoundedRect(65,233,100,29,6,6)
-            for k in range(8):p.drawRoundedRect(73+k*11,243,7,8,2,2)
-            p.setBrush(QColor('#b8def9'));p.drawEllipse(87,225+int(math.sin(self.phase*7)*3),21,14);p.drawEllipse(127,225-int(math.sin(self.phase*7)*3),21,14)
+        if typing and (not self.skin_data or self.skin_data.get('keyboard_overlay',True)):
+            p.setPen(QColor('#79aace'));p.setBrush(QColor('#c4e0f5'));p.drawRoundedRect(37,244,156,30,8,8)
+            for row in range(2):
+                for col in range(10):
+                    side=0 if col<5 else 1;press=self.reaction.pressure(side)
+                    p.setBrush(QColor('#6bb8ef') if press>.35 and col==(2 if side==0 else 7) else QColor('#f5fbff'))
+                    p.drawRoundedRect(44+col*14,249+row*10,11,7,2,2)
+            for side,x in [(0,71),(1,129)]:
+                pressure=self.reaction.pressure(side);hand_y=218+int(pressure*21)
+                p.setPen(QColor('#639bcb'));p.setBrush(QColor('#9bcbee'));p.drawRoundedRect(x-5,hand_y-8,37,22,8,8)
+                p.setPen(QColor('#d4b7a2'));p.setBrush(QColor('#fff1df'));p.drawRoundedRect(x,hand_y+3,29,16,7,7)
+                for finger in range(3):p.drawLine(x+7+finger*6,hand_y+12,x+7+finger*6,hand_y+17)
+                if pressure>.65:p.setPen(QColor('#419ddb'));p.drawText(x+6,275,'✦')
+        if state=='sleep':p.setPen(QColor('#75a8d0'));p.setFont(QFont('Microsoft YaHei',15));p.drawText(166,106,'z Z')
         for sx,sy,life in self.sparkles:
             p.setPen(QColor(86,165,227,min(255,life*11)));p.drawText(int(sx),int(sy),'✦')
-        p.setPen(QColor('#508cb8'));p.drawText(15,286,200,20,Qt.AlignCenter,'星梨 · 双击打开学习空间')
+        name=self.skin_data['name'][:12] if self.skin_data else '星梨'
+        p.setPen(QColor('#508cb8'));p.drawText(15,286,200,20,Qt.AlignCenter,name+' · 双击打开学习空间')
     def mousePressEvent(self,e):
         if e.button()==Qt.LeftButton:self.drag=e.globalPosition().toPoint()-self.pos()
         if e.button()==Qt.RightButton:
-            menu=QMenu(self);menu.addAction('打开学习空间',self.control.reveal);menu.addAction('摸摸头',self.pat);menu.addAction('一起伸个懒腰',self.stretch);menu.addAction('命令助手',self.control.open_commands);menu.addAction('安静 / 恢复提醒',self.control.quiet_toggle);menu.addAction('隐藏桌宠（托盘可恢复）',self.hide);menu.addAction('退出',self.control.quit_app);menu.exec(e.globalPosition().toPoint())
+            menu=QMenu(self);menu.addAction('打开学习空间',self.control.reveal);menu.addAction('创意工坊',lambda:(self.control.reveal(),self.control.tabs.setCurrentWidget(self.control.workshop)));menu.addAction('摸摸头',self.pat);menu.addAction('一起伸个懒腰',self.stretch);menu.addAction('命令助手',self.control.open_commands);menu.addAction('安静 / 恢复提醒',self.control.quiet_toggle);menu.addAction('隐藏桌宠（托盘可恢复）',self.hide);menu.addAction('退出',self.control.quit_app);menu.exec(e.globalPosition().toPoint())
     def mouseMoveEvent(self,e):
         if self.drag is not None:self.move(e.globalPosition().toPoint()-self.drag)
     def mouseReleaseEvent(self,e):
         self.drag=None;self.clamp();self.control.store.set('pet_position',[self.x(),self.y()])
     def mouseDoubleClickEvent(self,e):self.control.reveal()
     def pat(self):
+        self.pat_until=time.monotonic()+3
         self.frame=2;self.hop_until=self.phase+3;self.sparkles.extend((random.randint(65,165),random.randint(150,230),30) for _ in range(8));self.say(random.choice(['摸摸头收到啦，做完这一小段再玩。','我陪着你，慢一点也没关系。','把任务缩小一点，就更容易开始啦。']));QTimer.singleShot(3000,self.restore_frame)
     def stretch(self):
         self.hop_until=self.phase+4;self.say("一起活动一下肩膀，再做下一步吧。");self.sparkles.extend((random.randint(65,165),200,30) for _ in range(5))
@@ -121,12 +174,13 @@ class Pet(QWidget):
 
 class Main(QMainWindow):
     def __init__(self):
-        super().__init__();DATA.mkdir(parents=True,exist_ok=True);self.store=Store(DATA/'study.sqlite3');self.clock=FocusClock();self.ticks=0;self.worker=None;self.clip_memory=ClipboardMemory();self.keyboard=KeyboardActivity();self.key_count=0;self.hotkey_registered=False;self.quiet=self.store.get('quiet',False);self.sound=None
-        self.setWindowTitle('LR StudyPet · 星梨学习空间');self.resize(980,720);self.setMinimumSize(800,620);self.setWindowTitle("LR StudyPet · 星梨 v0.3.0")
+        super().__init__();DATA.mkdir(parents=True,exist_ok=True);self.store=Store(DATA/'study.sqlite3');self.clock=FocusClock();self.ticks=0;self.worker=None;self.clip_memory=ClipboardMemory();self.keyboard=KeyboardListener();self.key_count=0;self.hotkey_registered=False;self.quiet=self.store.get('quiet',False);self.sound=None
+        self.setWindowTitle('星梨桌宠 · 学习与创意工坊');self.resize(1040,760);self.setMinimumSize(800,620);self.setWindowTitle("星梨桌宠 v0.4.0 · 学习与创意工坊")
         root=QWidget();self.setCentralWidget(root);layout=QVBoxLayout(root);layout.setContentsMargins(24,18,24,18)
-        head=QHBoxLayout();head.addWidget(label('星梨的学习空间',True));head.addStretch();head.addWidget(button('桌宠',lambda:self.pet.show()));layout.addLayout(head)
+        head=QHBoxLayout();head.addWidget(label('星梨桌宠 · 学习空间',True));head.addStretch();head.addWidget(button('桌宠',lambda:self.pet.show()));layout.addLayout(head)
         self.status=label('');layout.addWidget(self.status);self.tabs=QTabWidget();layout.addWidget(self.tabs)
         self.focus_ui();self.task_ui();self.review_ui();self.rescue_ui();self.journal_ui();self.stats_ui();self.chat_ui();self.plan_ui();self.toolbox_ui();self.settings_ui()
+        self.workshop=Workshop(self,DATA/'pets');self.add_tab(self.workshop,'创意工坊')
         self.pet=Pet(self);self.apply_pet_size(self.pet_scale.value());self.pet.show();self.tray=QSystemTrayIcon(self)
         self.update_subjects()
         QApplication.instance().screenRemoved.connect(lambda screen:QTimer.singleShot(0,self.pet.clamp))
@@ -134,7 +188,8 @@ class Main(QMainWindow):
         menu=QMenu();menu.addAction('学习空间',self.reveal);menu.addAction('显示桌宠',self.pet.show);menu.addAction('安静 / 恢复提醒',self.quiet_toggle);menu.addAction('退出',self.quit_app);self.tray.setContextMenu(menu);self.tray.activated.connect(lambda reason:self.reveal() if reason==QSystemTrayIcon.DoubleClick else None);self.tray.show()
         self.timer=QTimer(self);self.timer.timeout.connect(self.tick);self.timer.start(1000);self.refresh()
         QApplication.instance().clipboard().dataChanged.connect(self.clipboard_changed)
-        self.activity_timer=QTimer(self);self.activity_timer.timeout.connect(self.activity_tick);self.activity_timer.start(50)
+        self.activity_timer=QTimer(self);self.activity_timer.timeout.connect(self.activity_tick);self.activity_timer.start(16)
+        if self.keyboard_enabled.isChecked():self.keyboard.start()
         self.expiry_timer=QTimer(self);self.expiry_timer.timeout.connect(self.clipboard_display);self.expiry_timer.start(250)
         QApplication.instance().installEventFilter(self)
         if sys.platform=='win32':self.register_command_hotkey()
@@ -285,16 +340,22 @@ class Main(QMainWindow):
         row=QHBoxLayout();self.desktop_input=QLineEdit(str(desktop_path()));row.addWidget(self.desktop_input);row.addWidget(button('选择桌面目录',self.choose_desktop));row.addWidget(button('生成整理建议',self.scan_desktop));v.addLayout(row);self.desktop_output=QTextEdit();self.desktop_output.setReadOnly(True);v.addWidget(self.desktop_output)
         row=QHBoxLayout();row.addWidget(button('打开所选目录',self.open_desktop));row.addWidget(button('命令助手 · Ctrl+Alt+Space',self.open_commands));row.addWidget(button('互动：伸懒腰',lambda:self.pet.stretch()));v.addLayout(row)
         v.addWidget(label('键盘联动需手动开启；剪贴板不会写入磁盘或发送给 AI。整理功能只给建议。命令助手只读取你在助手框里输入的内容。'));self.add_tab(w,'桌面助手')
-    def keyboard_toggle(self,x):self.store.set('keyboard_enabled',x);self.keyboard.clear()
+    def keyboard_toggle(self,x):
+        self.store.set('keyboard_enabled',x)
+        if x:self.keyboard.start()
+        else:self.keyboard.stop()
+        if hasattr(self,'pet'):self.pet.reaction.clear();self.pet.demo_until=0;self.pet.restore_frame()
     def activity_tick(self):
         if not self.keyboard_enabled.isChecked():return
         count=self.keyboard.poll()
+        self.pet.reaction.held=self.keyboard.held
         if count:self.on_keys(count)
+        if self.keyboard.error:self.typing_count.setText('键盘监听不可用：'+self.keyboard.error)
     def eventFilter(self,obj,event):
         if sys.platform!='win32' and event.type()==QEvent.KeyPress and self.keyboard_enabled.isChecked():self.on_keys(1)
         return False
     def on_keys(self,count):
-        self.key_count+=count;self.pet.typing();self.typing_count.setText(f'本次按键活动：{self.key_count}');self.pet.frame=1 if self.clock.mode!='break' else 3
+        self.key_count+=count;self.pet.typing(count);self.typing_count.setText(f'本次按键活动：{self.key_count}')
     def apply_pet_size(self,n):
         if hasattr(self,'pet'):self.pet.setFixedSize(int(230*n/100),int(310*n/100));self.pet.clamp()
         self.store.set('pet_scale',n)
@@ -358,6 +419,7 @@ class Main(QMainWindow):
         row=QHBoxLayout();row.addWidget(button('导出学习备份',self.export));row.addWidget(button('恢复学习备份',self.restore));row.addWidget(button('安静 / 恢复提醒',self.quiet_toggle));v.addLayout(row)
         row=QHBoxLayout();self.subject_names=QLineEdit('，'.join(self.store.get('custom_subjects',SUBJECTS)));row.addWidget(self.subject_names);row.addWidget(button('保存科目',self.save_subjects));v.addLayout(row)
         v.addWidget(label('用中文或英文逗号分隔科目；最多 20 个。已有记录的科目继续保留。'))
+        row=QHBoxLayout();row.addWidget(label('停止打字后进入睡觉 / 秒'));self.sleep_delay=QSpinBox();self.sleep_delay.setRange(15,600);self.sleep_delay.setValue(self.store.get('sleep_delay',45));self.sleep_delay.valueChanged.connect(lambda n:self.store.set('sleep_delay',n));row.addWidget(self.sleep_delay);v.addLayout(row)
         self.health=QCheckBox('每 50 分钟轻声提醒活动和喝水');self.health.setChecked(self.store.get('health',True));self.health.toggled.connect(lambda x:self.store.set('health',x));v.addWidget(self.health)
         row=QHBoxLayout();row.addWidget(button('雨声开 / 关',self.noise));row.addWidget(button('两分钟离屏休息',self.short_break));v.addLayout(row)
         v.addWidget(label('数据保存在本机用户目录。关闭学习窗口后桌宠继续运行；从桌宠右键或托盘菜单退出。右键桌宠可以摸头、切换安静模式和退出。'));v.addStretch();scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setFrameShape(QFrame.NoFrame);scroll.setWidget(w);self.add_tab(scroll,'设置')
@@ -453,7 +515,7 @@ class Main(QMainWindow):
         else:e.ignore();self.quit_app()
     def quit_app(self):
         if self.worker and self.worker.isRunning():QMessageBox.information(self,'正在连接','AI 请求仍在进行，结束后再退出，最长等待约 45 秒。');return
-        self.end_focus();self.clip_memory.clear();self.keyboard.clear()
+        self.end_focus();self.clip_memory.clear();self.keyboard.stop()
         if self.hotkey_registered:
             import ctypes,ctypes.wintypes
             ctypes.windll.user32.UnregisterHotKey.argtypes=[ctypes.wintypes.HWND,ctypes.c_int]
@@ -467,7 +529,7 @@ if __name__=='__main__':
     app=QApplication(sys.argv);app.setStyleSheet(STYLE);app.setQuitOnLastWindowClosed(False);main=Main();main.show() if '--tray' not in sys.argv else main.hide()
     if '--smoke-test' in sys.argv:
         from smoke import run
-        run(main,app,Path.cwd());main.tray.hide();main.pet.hide();main.hide();sys.exit(0)
+        run(main,app,Path.cwd());main.keyboard.stop();main.tray.hide();main.pet.hide();main.hide();sys.exit(0)
     if '--screenshot' in sys.argv:
         QTimer.singleShot(800,lambda:main.grab().save(str(ROOT/'preview.png')));QTimer.singleShot(1000,app.quit)
     sys.exit(app.exec())

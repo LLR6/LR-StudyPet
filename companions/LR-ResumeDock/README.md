@@ -21,7 +21,7 @@ Windows 源码：安装 Python 3.12/3.13，完整下载此目录，双击 `Start
 跨平台：`python -m pip install -r requirements.txt`，再运行 `python app.py`。
 Windows 便携构建产物在 StudyPet 的 [Actions](https://github.com/LLR6/LR-StudyPet/actions)，名称 `LR-ResumeDock-Windows`。下载并完整解压后运行 `Start.cmd`，无需另装 Python。
 
-独立仓库尚未创建，当前目录可单独下载、运行和打包。
+Windows 下载也会发布在 [星梨下载页](https://github.com/LLR6/LR-StudyPet/releases)。独立仓库尚未创建，当前目录可单独下载、运行和打包。
 
 ## 30 秒案例
 

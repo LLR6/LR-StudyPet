@@ -23,10 +23,21 @@ with tempfile.TemporaryDirectory() as folder:
     main.tabs.setCurrentIndex(5);app.processEvents();main.grab().save('docs/growth-preview.png');frames.append(Image.open('docs/growth-preview.png'))
     main.tabs.setCurrentIndex(8);app.processEvents();main.grab().save('docs/toolbox-preview.png');frames.append(Image.open('docs/toolbox-preview.png'))
     frames[0].save('docs/demo.gif',save_all=True,append_images=frames[1:],duration=2400,loop=0)
+    from workshop import install_pack
+    archive=Path(folder)/'template.lrpet';main.pet.export_template(archive)
+    ident,data=install_pack(archive,main.workshop.library);main.workshop.refresh(ident)
+    main.workshop.name.setText('我的星梨');main.workshop.author.setText('LR');main.workshop.license.setText('可随星梨桌宠使用，保留出处')
+    for state,file in data['states'].items():
+        main.workshop.sources[state]=str(main.workshop.library/ident/file);main.workshop.source_labels[state].setText(file)
+    main.tabs.setCurrentWidget(main.workshop);app.processEvents();main.grab().save('docs/workshop-preview.png')
     pet_frames=[]
     main.pet.setFixedSize(230,310);main.pet.say('演示：你打字，我也陪着打字。')
-    for i in range(12):
-        main.pet.typing();main.pet.animate();app.processEvents()
+    import time
+    simulated=[0];main.pet.reaction.now=lambda:simulated[0];main.pet.reaction.clear();main.pet.demo_until=time.monotonic()+20
+    for i in range(25):
+        simulated[0]=i*0.065
+        if i in (0,3,6,9,12,15):main.pet.reaction.press()
+        main.pet.animate();app.processEvents()
         frame=Path(folder)/'pet.png';main.pet.grab().save(str(frame));pet_frames.append(Image.open(frame).copy())
-    pet_frames[0].save('docs/pet-demo.gif',save_all=True,append_images=pet_frames[1:],duration=100,loop=0,disposal=2)
+    pet_frames[0].save('docs/pet-demo.gif',save_all=True,append_images=pet_frames[1:],duration=65,loop=0,disposal=2)
     main.tray.hide();main.pet.hide();main.store.db.close();main.hide()

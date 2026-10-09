@@ -38,7 +38,7 @@ jobs:
           Copy-Item dist\LR-StudyPet package\LR-StudyPet\bin\LR-StudyPet -Recurse
           Copy-Item Start.cmd,README.md,README.en.md,LICENSE,THIRD_PARTY.md package\LR-StudyPet
           Copy-Item smoke-result.json,windows-preview.png package\LR-StudyPet
-          Copy-Item third-party-licenses package\LR-StudyPet -Recurse
+          Copy-Item third-party-licenses,docs,examples package\LR-StudyPet -Recurse
           $pythonLicense = python -c "import sys; print(sys.base_prefix + '/LICENSE.txt')"
           Copy-Item $pythonLicense package\LR-StudyPet\third-party-licenses\PYTHON-LICENSE.txt
           Remove-Item package\LR-StudyPet\smoke-result.json
@@ -50,12 +50,12 @@ jobs:
             $result = Get-Content smoke-result.json -Raw | ConvertFrom-Json
             if ($result.status -ne 'passed') { throw 'Packaged launcher smoke test failed' }
           } finally { Pop-Location }
-          Compress-Archive -Path package\LR-StudyPet -DestinationPath LR-StudyPet-Blue-v0.3.0-Windows-x64.zip
+          Compress-Archive -Path package\LR-StudyPet -DestinationPath LR-StudyPet-Blue-v0.4.0-Windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: LR-StudyPet-Windows
           path: |
-            LR-StudyPet-Blue-v0.3.0-Windows-x64.zip
+            LR-StudyPet-Blue-v0.4.0-Windows-x64.zip
             smoke-result.json
             windows-preview.png
       - name: Publish tested beta release
@@ -64,12 +64,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          gh release view v0.3.0 --repo "${{ github.repository }}" 2>$null
+          gh release view v0.4.0 --repo "${{ github.repository }}" 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create v0.3.0 --repo "${{ github.repository }}" --title "星梨 v0.3.0 · 学习周报与复习卡导入" --notes-file RELEASE.md --prerelease --target "${{ github.sha }}"
+            gh release create v0.4.0 --repo "${{ github.repository }}" --title "星梨 v0.4.0 · 创意工坊与打字互动" --notes-file RELEASE.md --prerelease --target "${{ github.sha }}"
             if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
           }
-          gh release upload v0.3.0 LR-StudyPet-Blue-v0.3.0-Windows-x64.zip --repo "${{ github.repository }}" --clobber
+          gh release upload v0.4.0 LR-StudyPet-Blue-v0.4.0-Windows-x64.zip --repo "${{ github.repository }}" --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
   companions:
     runs-on: windows-latest
@@ -113,3 +113,17 @@ jobs:
         with:
           name: ${{ matrix.project }}-Windows
           path: companions/${{ matrix.project }}/${{ matrix.project }}-v0.1.0-Windows-x64.zip
+  publish-companions:
+    needs: [windows, companions]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-Windows'
+          path: companion-builds
+          merge-multiple: true
+      - name: Publish standalone companion downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload v0.4.0 companion-builds/LR-ResumeDock-v0.1.0-Windows-x64.zip companion-builds/LR-DeskTidy-v0.1.0-Windows-x64.zip --repo "${{ github.repository }}" --clobber
